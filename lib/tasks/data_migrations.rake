@@ -6,152 +6,6 @@ require 'ccsv'
 namespace :data do
   namespace :migrate do
 
-    desc "Remove \"empty\" Questions"
-    task :remove_empty_questions => :environment do
-      Question.query.each do |q|
-        q.destroy if q.title.nil?
-      end
-    end
-
-    desc "Regenerate Questions NewsItems"
-    task :regenerate_questions_news_items => :environment do
-      Question.query.each do |q|
-        nu = q.news_update
-        if nu != nil and nu.news_items.nil? and nu.entry_type == "Question"
-          NewsItem.from_news_update! nu
-        end
-      end
-    end
-
-    desc "Recalculate votes average"
-    task :recalculate_votes_average => :environment do
-      Comment.query.each do |voteable|
-        score = 0
-        voteable.votes.each do |v|
-          score += v.value
-        end
-        voteable.votes_count = voteable.votes.count
-        voteable.votes_average = score
-        voteable.save :validate => false
-      end
-    end
-
-    desc "Add default topics to each university"
-    task :add_default_topics_to_universities => :environment do
-
-      # Topics of interest to everyone
-      shared_topics = []
-      ["Moradia", "Bolsas",
-       "Consumo consciente",
-       "Iniciação científica", "Intercâmbio",
-       "Assistência estudantil", "Entrega em domicílio",
-       "Esporte", "Aprendizado de idiomas", "Aluguel",
-       "Bicicleta"].each do |title|
-        topic = Topic.find_by_title(title)
-        if topic.blank?
-          puts "Topic \"#{title}\" not found!"
-        else
-          shared_topics << topic
-        end
-      end
-
-      University.query.each do |university|
-        name = university.short_name || university.name
-        if university.university_topics.blank?
-          puts "Populating topics for #{name}"
-          own_topic = Topic.find_by_title(name)
-          if own_topic.blank?
-            puts "Creating topic \"#{name}\""
-            own_topic = Topic.create!(:title => name)
-          end
-
-          university.university_topics << own_topic
-          shared_topics.each do |topic|
-            university.university_topics << topic
-          end
-          university.save :validate => false
-        else
-          puts "Skipping #{name}"
-        end
-      end
-    end
-
-    desc "Add the user's university to his short bio"
-    task :add_university_to_short_bio => :environment do
-      User.query.each do |user|
-        if user.bio.blank? && user.affiliations.present?
-          university = user.affiliations.first.university
-          puts ("Populating short bio for user \"#{user.name}\" " +
-                "from #{university.short_name}")
-          user.bio = university.short_name
-          user.save :validate => false
-        else
-          puts "Skipping user \"#{user.name}\""
-        end
-      end
-    end
-
-    desc "Add question authors as watchers"
-    task :add_question_authors_as_watchers => :environment do
-      Question.query.each do |question|
-        if question.user_id.blank?
-          puts "Missing author in \"#{question.title}\""
-          next
-        elsif !question.watchers.include?(question.user_id)
-          puts "Added user \"#{question.user.name}\" in \"#{question.title}\""
-          question.add_watcher(question.user)
-        else
-          puts "Skipped \"#{question.title}\""
-        end
-      end
-    end
-
-    desc "Find topics related to Unicamp."
-    task :populate_unicamp_topics => :environment do
-      unicamp = University.find_by_short_name("Unicamp")
-      topic_names = ["Unicamp",
-                     "Barão Geraldo", "Campinas",
-                     "DAC (Unicamp)", "SAE Unicamp",
-                     "CECOM (Unicamp)",
-                     "Restaurante Universitário da Unicamp (Bandejão)",
-                     "Bolsas-auxílio (Unicamp)",
-                     "Comida na Unicamp", "Moradia Estudantil da Unicamp",
-                     "DCE da Unicamp", "Sistema de Bibliotecas da Unicamp",
-                     "Restaurantes da Unicamp", "Intercâmbio"]
-      topic_names.each do |topic_name|
-        puts topic_name
-        topic = Topic.find_by_title(topic_name)
-        if topic.blank?
-          puts "Could not find topic \"#{topic_name}\""
-        else
-          unicamp.university_topics << topic
-        end
-      end
-      unicamp.save!
-    end
-
-    desc "Calculate each topic's followers count"
-    task :calculate_followers_count => :environment do
-      Topic.query.each do |topic|
-        next if topic.follower_ids.blank?
-        topic.followers_count = topic.follower_ids.length
-        topic.save :validate => false
-      end
-    end
-
-    desc "Create suggestion lists for all users."
-    task :create_suggestion_lists => :environment do
-      User.query.each do |user|
-        if user.suggestion_list.blank?
-          puts user.name
-          user.suggestion_list = SuggestionList.new(:user => user)
-          user.save :validate => false
-        else
-          puts "User #{user.name} had already a suggestion list"
-        end
-      end
-    end
-
     desc "Delete a question's news items if it has already been answered."
     task :delete_duplicate_news_items => :environment do
       Question.query.each do |question|
@@ -163,7 +17,7 @@ namespace :data do
       end
     end
 
-    desc "Create missing news items for topics."
+    desc "Create missing news items for topis."
     task :create_news_items_for_topics => :environment do
       Question.query.each do |question|
         next if !question.news_update
@@ -190,45 +44,19 @@ namespace :data do
     desc "Update old users format (academic e-mail inside users model) to the new one (user affiliation university)"
     task :move_user_academic_email_to_affiliation => :environment do
 
-      unconfirmed_users = 0
-
       User.where(:academic_email.ne => nil).each do |user|
-        if Affiliation.find_by_email(user.academic_email).present?
-          puts "Skipping email #{user.academic_email}"
-          next
-        end
-        puts "Creating affiliation for #{user.academic_email}"
         a = Affiliation.new
         a.user = user
-        unconfirmed = false
 
-        if !(a.confirmed_at = user.confirmed_at)
-          puts "Unconfirmed affiliation for #{user.academic_email}"
-          unconfirmed = true
-
-          # HACK: We do not want to send emails to old unconfirmed
-          # users.  The confirmation step is ignored if the
-          # affiliation has a confimation date, so we set it now and
-          # unset it later.
-          a.confirmed_at = Time.now
-          unconfirmed_users += 1
-        end
-
+        a.confirmed_at = user.confirmed_at
         a.email = user.academic_email
         short_name = /[.@]unicamp.br$/ =~ a.email ? "Unicamp" : "USP"
         a.university = University.where(:short_name => short_name).first
 
-        a.save!
-        if unconfirmed
-          # This will avoid the after_create hook.
-          a.confirmed_at = nil
-          a.save!
-        end
+        a.save ? print('.') : puts("Failed saving affiliation for user #{user.id}!!!!")
 
-        user.save :validate => false
+        user.save ? print('-') : puts("Failed saving user #{user.id}!!!!")
       end
-
-      puts "There were #{unconfirmed_users} unconfirmed users"
     end
 
     desc "(USING THIS WILL REMOVE DOMAINS!) fix csv file from uni2.csv to uni.csv"
@@ -249,6 +77,52 @@ namespace :data do
       end
       f.close
     end
+
+    desc "Prepare Universities to inhert from Topics"
+    task :prepare_universities_as_topics => :environment do
+    	  # Import Universities
+	  University.all.each do |u|
+
+	    # prepare updates values
+	    update_array = u.attributes.merge({:title => u.short_name})
+	    update_array.delete(:short_name)
+
+	    # if the topic already exists
+	    if t = Topic.where(:title => u.short_name).first
+	      print "Exists "+t.title
+	      Topic.set(t.id, update_array)
+	      
+	      # reload the updated topic
+	      t = Topic.where(:title => u.short_name).first
+	      debugger
+	      puts " Updated "+t.name
+
+	    # if the topic doesnt exists
+	    else
+	      t = Topic.new(update_array)
+	      # puts "Saved "+t.title if t.save
+	    end
+
+	    #  In both cases, set _type, get affiliations
+	    # and delete old university
+	    Topic.set(t.id, :_type => "University")
+
+	    affiliations = Affiliation.where(:university_id => u.id).all
+
+	    affiliations.each do |a|
+	      a.university_id = t.id
+	      puts "Error in affiliation migration" unless a.save
+	    end
+
+	    u.delete
+
+	  end
+
+	  Topic.all.each do |t|
+	    Topic.set(t.id, :_type => "Topic") if t._type.blank?
+	  end
+
+	end
 
     desc "Import Universities from a csv file in the format [name, short_name,
  state, V, domain] where V is TRUE if the university is open for signup or
