@@ -1,0 +1,17 @@
+- affiliation_count_all = @university.affiliation.count
+- affiliation_count_unconfirmed = @university.affiliation.where(:confirmed_at => nil).count
+- affiliation_unconfirmed_message = affiliation_count_unconfirmed == 0 ? "" : " (#{affiliation_count_unconfirmed} #{t(".unconfirmed")})"
+- affiliation_message = case affiliation_count_all
+-                         when 0 then t(".no_affiliations") + affiliation_unconfirmed_message
+-                         when 1 then "1 "+t(".affiliation") + affiliation_unconfirmed_message
+-                         else "#{affiliation_count_all} " + t(".affiliations") + affiliation_unconfirmed_message
+
+#universities
+  %h1.navtitle.title.entry-title
+    = t(".title", :university => @university.name)
+    
+  %p= @university.sig
+  %p= @university.name
+  %p= @university.domain
+  %p= @university.open_for_signup? ? t(".is_open_for_signup") : t(".is_closed_for_signup")
+  %p= affiliation_message

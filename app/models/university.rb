@@ -32,10 +32,11 @@ class University
   has_many :university_topics, :class_name => "Topic",
     :in => :university_topic_ids
 
-  # It's short_name.desc, not .asc, because it's a quick heuristic for
-  # now to show good Brazilian universities (Unicamp, Usp) first and
-  # Harvard last (it would be weird if Harvard came first)
-  scope :open_for_signup, where(:open_for_signup => true).sort(:short_name.desc)
+  scope :open_for_signup, where(:open_for_signup => true).sort(:short_name.asc)
+
+  def open_for_signup?
+    open_for_signup
+  end
 
   def email_regexp
     if self.domains.present?

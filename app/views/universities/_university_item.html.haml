@@ -1,0 +1,5 @@
+%tr
+  %td= link_to university.sig, university_path(university)
+  %td= university.name 
+  %td= university.domain
+  %td= university.open_for_signup? ? t(".open") : t(".closed")

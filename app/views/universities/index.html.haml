@@ -1,0 +1,15 @@
+#universities
+  %h1.navtitle.title.entry-title
+    = t(".list_title")
+    
+  %table.table
+    %thead
+      %tr
+        %th= t(".sig")
+        %th= t(".name")
+        %th= t(".domain")
+        %th= t(".open_for_signup")
+    %tbody
+      - @universities.each do |university|
+        = render :partial=> "university_item", :locals=> {:university => university}
+      = will_paginate(@universities)
